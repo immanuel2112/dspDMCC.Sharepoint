@@ -30,5 +30,22 @@ namespace dspDMCC.Sharepoint
         public List<ADMTargetReportValue> TargetReportValues { get; set; }
 
         public string ADMReportPath { get; set; }
+
+        public override string ToString()
+        {
+            return "Sys: " + Sys +
+                ", LoadManagerId: " + LoadManagerId +
+                ", Wave: " + Wave +
+                ", Processarea: " + Processarea +
+                ", Object: " + Object +
+                ", Target: " + Target +
+                ", WaveProcessareaObjectTargetID: " + WaveProcessareaObjectTargetID +
+                ", LoadCycle: " + LoadCycle +
+                ", InitialDelta:" + InitialDelta +
+                ", Version:" + Version +
+                ", SharepointValue:" + SharepointValue +
+                ", TargetReportValues:" + TargetReportValues +
+                ", ADMReportPath:" + ADMReportPath;
+        }
     }
 }

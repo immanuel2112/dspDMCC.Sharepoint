@@ -5,6 +5,7 @@ using OfficeDevPnP.Core;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.IO;
 
 namespace dspDMCC.Sharepoint
@@ -17,50 +18,54 @@ namespace dspDMCC.Sharepoint
 
     public class Sharepoint : Plugin
     {
+        private System.Diagnostics.EventLog eventLog = new System.Diagnostics.EventLog("Application");
+        private ADMSharepointValue admSPValue = new ADMSharepointValue();
+
         protected override void OnExecute()
         {
             try
             {
+                eventLog.Source = "dspDMCC.Sharepoint";
+                eventLog.WriteEntry("Executing dspDMCC.Sharepoint process for load manager entry id: " + this.PageData.ID);
+
                 Log.Information(this, "Executing dspDMCC.Sharepoint process for load manager entry id: " + this.PageData.ID);
-                ADMSharepointValue admSPValue = new ADMSharepointValue();
                 admSPValue.LoadManagerId = this.PageData.ID;
                 admSPValue.Sys = Host.GetDataService(Host.Page.DataSourceID);
 
                 // Get Sharepoint configuration values from DMCC ztSharepoint table.
-                SharepointValue spValue = GetSharepointValues(ref admSPValue);
+                GetSharepointValues();
 
-                if (spValue != null)
+                if (admSPValue.SharepointValue != null)
                 {
                     // Fetch load manager attributes
-                    GetLoadManagerDetails(ref admSPValue);
+                    GetLoadManagerDetails();
 
                     // Fetch Target Report details
-                    List<ADMTargetReportValue> targetReportValues = GetTargetReportDetails(admSPValue);
+                    List<ADMTargetReportValue> targetReportValues = GetTargetReportDetails();
                     admSPValue.TargetReportValues = targetReportValues;
 
                     // Upload files to sharepoint
-                    UploadReports(admSPValue);
+                    UploadReports();
                 }
 
                 Log.Information(this, "Execution Completed - dspDMCC.Sharepoint process for load manager entry id: " + this.PageData.ID);
-
+ 
             }
             catch (Exception ex)
             {
-                Log.Error(this, "Error in dspDMCC.Sharepoint process: " + ex.Message);
-                Log.Error(this, "Error in dspDMCC.Sharepoint process: " + ex);
-                throw new Exception(string.Format("Error in uploading process: " + ex.Message));
-                throw new Exception(string.Format("Error in uploading process: " + ex));
+                Log.Error(this, ""+ex);
+                eventLog.WriteEntry("" + ex, EventLogEntryType.Error);
+                throw new Exception(string.Format("" + ex));
             }
         }
 
-        private SharepointValue GetSharepointValues(ref ADMSharepointValue admSPValue)
+        private void GetSharepointValues()
         {
             SharepointValue spValue = null;
             try
             {
                 DataTable dt = admSPValue.Sys.GetDataTable("SELECT TOP 1  [ID], [Name], [SiteURL], [SiteID], [ClientID], [ClientSecret], [FolderURL], [BaseFolderName] FROM [dspDMCC].[dbo].[ztSharepoint]");
-                if(dt != null)
+                if (dt != null)
                 {
                     spValue = new SharepointValue();
                     spValue.Id = dt.Rows[0]["ID"].ToString();
@@ -76,16 +81,15 @@ namespace dspDMCC.Sharepoint
             }
             catch (Exception ex)
             {
-                Log.Error(this, "Error in dspDMCC.Sharepoint.GetSharepointValues method: " + ex.Message);
-                Log.Error(this, "Error in dspDMCC.Sharepoint.GetSharepointValues method: " + ex);
-                throw new Exception(string.Format("Error in sharepoint details from ADM: " + ex.Message));
-                throw new Exception(string.Format("Error in sharepoint details from ADM: " + ex));
+                Log.Error(this, "" + ex);
+                eventLog.WriteEntry("" + ex, EventLogEntryType.Error);
+                throw new Exception(string.Format("" + ex));
             }
-            return spValue;
+            admSPValue.SharepointValue = spValue;
         }
 
 
-        private void GetLoadManagerDetails(ref ADMSharepointValue admSPValue)
+        private void GetLoadManagerDetails()
         {
             try
             {
@@ -98,7 +102,7 @@ namespace dspDMCC.Sharepoint
                                                                 "INNER JOIN [dspDMCC].[dbo].webConsoleAllTargetStructureSel as webConsoleAllTargetStructureSel " +
                                                                 "ON webConsoleAllTargetStructureSel.WaveProcessAreaObjectTargetID = ztLoadManagerTargetItemDetails.WaveProcessAreaObjectTargetID " +
                                                                 "CROSS JOIN Console.dbo.ztParam as ztParam " +
-                                                            "WHERE ztLoadManagerTargetItemDetails.ID = "+ admSPValue.LoadManagerId);
+                                                            "WHERE ztLoadManagerTargetItemDetails.ID = " + admSPValue.LoadManagerId);
                 if (dt != null)
                 {
                     admSPValue.Wave = dt.Rows[0]["Wave"].ToString();
@@ -109,29 +113,27 @@ namespace dspDMCC.Sharepoint
                     admSPValue.LoadCycle = dt.Rows[0]["LoadCycle"].ToString();
                     admSPValue.InitialDelta = dt.Rows[0]["LoadType"].ToString();
                     admSPValue.Version = dt.Rows[0]["Version"].ToString();
-                    admSPValue.ADMReportPath = dt.Rows[0]["ReportPath"].ToString();
                 }
 
             }
             catch (Exception ex)
             {
-                Log.Error(this, "Error in dspDMCC.Sharepoint.GetLoadManagerDetails method: " + ex.Message);
-                Log.Error(this, "Error in dspDMCC.Sharepoint.GetLoadManagerDetails method: " + ex);
-                throw new Exception(string.Format("Error in Load Manager Details from ADM: " + ex.Message));
-                throw new Exception(string.Format("Error in Load Manager Details from ADM: " + ex));
+                Log.Error(this, "" + ex);
+                eventLog.WriteEntry("" + ex, EventLogEntryType.Error);
+                throw new Exception(string.Format("" + ex));
             }
-        }
+         }
 
 
-        private List<ADMTargetReportValue> GetTargetReportDetails(ADMSharepointValue admSPValue)
+        private List<ADMTargetReportValue> GetTargetReportDetails()
         {
             List<ADMTargetReportValue> targetReportValues = null;
             try
             {
                 DataTable dt = admSPValue.Sys.GetDataTable("SELECT  WaveProcessAreaObjectTargetReportID, TargetReport, ReportType, FileLocation, SegmentByField " +
                                                            "FROM    dspDMCC.dbo.webConsoleTargetReportStructureSel " +
-                                                           "WHERE   CAST(WaveProcessAreaObjectTargetID AS NVARCHAR(50)) = '"+ admSPValue.WaveProcessareaObjectTargetID+ "' " +
-                                                           "        AND RecordCount > 0);");
+                                                           "WHERE   CAST(WaveProcessAreaObjectTargetID AS NVARCHAR(50)) = '" + admSPValue.WaveProcessareaObjectTargetID + "' " +
+                                                           "        AND RecordCount > 0");
                 if (dt != null)
                 {
                     targetReportValues = new List<ADMTargetReportValue>();
@@ -145,15 +147,16 @@ namespace dspDMCC.Sharepoint
                         admTargetReportValue.TargetReportSegmentByField = row["SegmentByField"].ToString();
 
                         targetReportValues.Add(admTargetReportValue);
-                    }                        
+                    }
                 }
+                admSPValue.TargetReportValues = targetReportValues;
 
                 // Fetch Segmented Target Report details 
-                if (targetReportValues != null)
+                if (admSPValue.TargetReportValues != null)
                 {
-                    foreach(ADMTargetReportValue value in targetReportValues)
+                    foreach (ADMTargetReportValue value in admSPValue.TargetReportValues)
                     {
-                        if(value.TargetReportSegmentByField != null)
+                        if (value.TargetReportSegmentByField != null)
                         {
                             dt = admSPValue.Sys.GetDataTable("SELECT  SegmentByValue, FileLocation " +
                                                      "FROM    DSW.dbo.ttWaveProcessAreaObjectTargetReportSegment " +
@@ -172,21 +175,20 @@ namespace dspDMCC.Sharepoint
                                 value.TargetReportSegmentValues = targetReportSegmentValues;
                             }
                         }
-                    }                    
+                    }
                 }
             }
             catch (Exception ex)
             {
-                Log.Error(this, "Error in dspDMCC.Sharepoint.GetTargetReportDetails method: " + ex.Message);
-                Log.Error(this, "Error in dspDMCC.Sharepoint.GetTargetReportDetails method: " + ex);
-                throw new Exception(string.Format("Error in Target Report Details from ADM: " + ex.Message));
-                throw new Exception(string.Format("Error in Target Report Details from ADM: " + ex));
+                Log.Error(this, "" + ex);
+                eventLog.WriteEntry("" + ex, EventLogEntryType.Error);
+                throw new Exception(string.Format("" + ex));
             }
             return targetReportValues;
         }
 
 
-        private void UploadReports(ADMSharepointValue admSPValue)
+        private void UploadReports()
         {
             try
             {
@@ -198,40 +200,47 @@ namespace dspDMCC.Sharepoint
                     ctx.ExecuteQuery();
 
                     // Create folder structure
-                    string newPath = CreateFolder(ctx, admSPValue);
+                    string newPath = CreateFolder(ctx);
+                    
                     // Upload reports without segment by configuration
                     List<ADMTargetReportValue> targetReportValues = admSPValue.TargetReportValues;
 
-                    if(targetReportValues != null)
+                    if (targetReportValues != null)
                     {
                         foreach (ADMTargetReportValue reportValue in targetReportValues)
                         {
                             string filePath = reportValue.TargetReportLocation;
                             string fileName = reportValue.TargetReport + ".xlsx";
-
-                            UploadFile(filePath, fileName, newPath, ctx, null);
-
+                            string segmentByField = reportValue.TargetReportSegmentByField;
                             List<ADMTargetReportSegmentValue> targetSegmentReportValues = reportValue.TargetReportSegmentValues;
-                            if (targetSegmentReportValues != null)
+
+                            if (filePath != null && filePath.Length > 0)
+                            {
+                                UploadFile(filePath, fileName, newPath, ctx, null);
+                            }
+
+                            if (segmentByField != null && targetSegmentReportValues != null)
                             {
                                 foreach (ADMTargetReportSegmentValue segmentValue in targetSegmentReportValues)
                                 {
                                     filePath = segmentValue.TargetReportSegmentLocation;
+                                    string segmentByValue = segmentValue.TargetReportSegmentByFieldValue;
                                     
-                                    UploadFile(filePath, fileName, newPath, ctx, segmentValue.TargetReportSegmentByFieldValue);
+                                    if (filePath != null)
+                                    {
+                                        UploadFile(filePath, fileName, newPath, ctx, segmentByValue);
+                                    }
                                 }
                             }
                         }
-                    }                    
-                    // Upload reports with segment by configuration
+                    }
                 };
             }
             catch (Exception ex)
             {
-                Log.Error(this, "Error in dspDMCC.Sharepoint.UploadReports method: " + ex.Message);
-                Log.Error(this, "Error in dspDMCC.Sharepoint.UploadReports method: " + ex);
-                throw new Exception(string.Format("Error in Uploading Reports to Sharepoint: " + ex.Message));
-                throw new Exception(string.Format("Error in Uploading Reports to Sharepoint: " + ex));
+                Log.Error(this, "" + ex);
+                eventLog.WriteEntry("" + ex, EventLogEntryType.Error);
+                throw new Exception(string.Format("" + ex));
             }
         }
 
@@ -240,63 +249,56 @@ namespace dspDMCC.Sharepoint
         {
             try
             {
-                if (srcFilePath != null)
+                Web web = ctx.Web;
+                if (segmentByValue != null)
                 {
-                    Web web = ctx.Web;
-                    if(segmentByValue != null)
+                    fileName = fileName.Replace(".xlsx", "_" + segmentByValue + ".xlsx");
+                }
+                ResourcePath folderPath = ResourcePath.FromDecodedUrl(spPath + "/" + fileName);
+                Folder parentFolder = web.GetFolderByServerRelativePath(folderPath);
+
+                byte[] fileData = null;
+
+                using (FileStream fs = System.IO.File.OpenRead(srcFilePath))
+                {
+                    using (BinaryReader binaryReader = new BinaryReader(fs))
                     {
-                        fileName = fileName.Replace(".xlsx", "_" + segmentByValue + ".xlsx");
+                        fileData = binaryReader.ReadBytes((int)fs.Length);
                     }
-                    ResourcePath folderPath = ResourcePath.FromDecodedUrl(spPath + "/" + fileName);
-                    Folder parentFolder = web.GetFolderByServerRelativePath(folderPath);
+                }
 
-                    byte[] fileData = null;
+                FileCollectionAddParameters fileAddParameters = new FileCollectionAddParameters();
+                fileAddParameters.Overwrite = true;
+                using (MemoryStream contentStream = new MemoryStream(fileData))
+                {
+                    // Add a file
+                    Microsoft.SharePoint.Client.File addedFile = parentFolder.Files.AddUsingPath(folderPath, fileAddParameters, contentStream);
 
-                    using (FileStream fs = System.IO.File.OpenRead(srcFilePath))
-                    {
-                        using (BinaryReader binaryReader = new BinaryReader(fs))
-                        {
-                            fileData = binaryReader.ReadBytes((int)fs.Length);
-                        }
-                    }
+                    // Select properties of added file to inspect
+                    ctx.Load(addedFile, f => f.UniqueId, f1 => f1.ServerRelativePath);
 
-                    FileCollectionAddParameters fileAddParameters = new FileCollectionAddParameters();
-                    fileAddParameters.Overwrite = true;
-                    using (MemoryStream contentStream = new MemoryStream(fileData))
-                    {
-                        // Add a file
-                        Microsoft.SharePoint.Client.File addedFile = parentFolder.Files.AddUsingPath(folderPath, fileAddParameters, contentStream);
+                    // Perform the actual operation
+                    ctx.ExecuteQuery();
 
-                        // Select properties of added file to inspect
-                        ctx.Load(addedFile, f => f.UniqueId, f1 => f1.ServerRelativePath);
-
-                        // Perform the actual operation
-                        ctx.ExecuteQuery();
-
-                        // Print the results
-                        Console.WriteLine(
-                         "Added File [UniqueId:{0}] [ServerRelativePath:{1}]",
-                         addedFile.UniqueId,
-                         addedFile.ServerRelativePath.DecodedUrl);
-                    }
+                    // Print the results
+                    // eventLog.WriteEntry("Added File [ServerRelativePath:" + addedFile.ServerRelativePath.DecodedUrl + "]");
                 }
             }
             catch (Exception ex)
             {
-                Log.Error(this, "Error in dspDMCC.Sharepoint.UploadFile method: " + ex.Message);
-                Log.Error(this, "Error in dspDMCC.Sharepoint.UploadFile method: " + ex);
-                throw new Exception(string.Format("Error in Upload File to Sharepoint: " + ex.Message));
-                throw new Exception(string.Format("Error in Upload File to Sharepoint: " + ex));
+                Log.Error(this, "" + ex);
+                eventLog.WriteEntry("" + ex, EventLogEntryType.Error);
+                throw new Exception(string.Format("" + ex));
             }
         }
-        
-        
-        private string CreateFolder(ClientContext ctx, ADMSharepointValue admSPValue)
+
+
+        private string CreateFolder(ClientContext ctx)
         {
             string newPath;
             try
             {
-                
+
                 string folderURL = admSPValue.SharepointValue.FolderURL;
                 string folderName = admSPValue.SharepointValue.BaseFolderName;
 
@@ -320,19 +322,17 @@ namespace dspDMCC.Sharepoint
 
                 // Check for existence for Version folder and create if it doesn't exists
                 newPath = CreateFolderUtility(ctx, newPath, 'v' + admSPValue.Version.ToString());
-
             }
             catch (Exception ex)
             {
-                Log.Error(this, "Error in dspDMCC.Sharepoint.CreateFolder method: " + ex.Message);
-                Log.Error(this, "Error in dspDMCC.Sharepoint.CreateFolder method: " + ex);
-                throw new Exception(string.Format("Error in Creating Folder in Sharepoint: " + ex.Message));
-                throw new Exception(string.Format("Error in Creating Folder in Sharepoint: " + ex));
+                Log.Error(this, "" + ex);
+                eventLog.WriteEntry("" + ex, EventLogEntryType.Error);
+                throw new Exception(string.Format("" + ex));
             }
             return newPath;
         }
 
-        
+
         private string CreateFolderUtility(ClientContext ctx, string folderURL, string folderName)
         {
             string newPath;
@@ -345,7 +345,6 @@ namespace dspDMCC.Sharepoint
                 Folder parentFolder = web.GetFolderByServerRelativePath(folderPath);
 
                 bool folderExists = parentFolder.FolderExists(folderNameNew);
-                Console.WriteLine("folderExists: " + folderExists);
                 if (!folderExists)
                 {
                     // Create the parameters used to add a folder
@@ -362,19 +361,14 @@ namespace dspDMCC.Sharepoint
                     ctx.ExecuteQuery();
 
                     // Print the results
-                    Console.WriteLine(
-                      "Added Folder [UniqueId:{0}] [ServerRelativePath:{1}]",
-                      addedFolder.UniqueId,
-                      addedFolder.ServerRelativePath.DecodedUrl);
                 }
                 newPath = folderURL + "/" + folderNameNew;
             }
             catch (Exception ex)
             {
-                Log.Error(this, "Error in dspDMCC.Sharepoint.CreateFolderUtility method: " + ex.Message);
-                Log.Error(this, "Error in dspDMCC.Sharepoint.CreateFolderUtility method: " + ex);
-                throw new Exception(string.Format("Error in Creating Folder Utility in Sharepoint: " + ex.Message));
-                throw new Exception(string.Format("Error in Creating Folder Utility in Sharepoint: " + ex));
+                Log.Error(this, "" + ex);
+                eventLog.WriteEntry("" + ex, EventLogEntryType.Error);
+                throw new Exception(string.Format("" + ex));
             }
             return newPath;
         }

@@ -229,7 +229,6 @@
     <Compile Include="ADMSharepointValue.cs" />
     <Compile Include="ADMTargetReportValue.cs" />
     <Compile Include="ADMTargetReportSegmentValue.cs" />
-    <Compile Include="SharepointPythonAPI.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Sharepoint.cs" />
     <Compile Include="SharepointValue.cs" />
